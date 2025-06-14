@@ -1,0 +1,22 @@
+[project]
+name = "discord-ctftime"
+version = "0.1.0"
+description = "bot discord inscription CTF"
+authors = [{ name = "lululufr", email = "lucas.lm.miller@gmail.com" }]
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+  "feedparser (>=6.0.11,<7.0.0)",
+  "discord (>=2.3.2,<3.0.0)",
+  "pytest (>=8.4.0,<9.0.0)",
+  "python-dotenv (>=1.1.0,<2.0.0)",
+]
+
+[tool.poetry]
+name = "discord-ctftime"
+version = "0.1.0"
+packages = [{ include = "discord_ctftime", from = "src" }]
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
