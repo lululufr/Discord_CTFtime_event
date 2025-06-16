@@ -7,6 +7,9 @@ from src.discord_ctftime.rss import Rss
 
 from src.discord_ctftime.bot.command import setup_commands
 
+
+import src.discord_ctftime.bot.dashboard
+
 import os
 from dotenv import load_dotenv
 
@@ -39,6 +42,8 @@ class Bot(commands.Bot):
         # enregistre toutes les commandes texte
         setup_commands(self, self.engine)
 
+        #dashbaord
+        await self.load_extension("src.discord_ctftime.bot.dashboard")
 
         guild = discord.Object(id=SERVER_ID)
         self.tree.copy_global_to(guild=guild)
