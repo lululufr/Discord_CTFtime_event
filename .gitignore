@@ -6,6 +6,7 @@
 
 # DB files
 data/*.db
+data/*.sqlite
 tests/events/data/*.db
 
 # Cython debug symbols
