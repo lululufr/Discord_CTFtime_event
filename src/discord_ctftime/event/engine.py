@@ -6,7 +6,7 @@ from typing import Iterable, Dict, Any, List, ClassVar
 import os
 from dotenv import load_dotenv
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from dateutil import parser
 
@@ -313,3 +313,86 @@ class Engine:
             raise LookupError("Aucun évènement futur avec des inscrits trouvé.")
 
         return cls.get_event_info(best_id)
+
+
+    @classmethod
+    def calendar_next_30_days(
+        cls,
+        now: datetime | None = None,
+        span_days: int = 30,  # facile à changer / tester
+    ) -> List[Dict[str, Any]]:
+        """
+        Renvoie la liste des événements prévus dans les `span_days` prochains
+        jours (par défaut 30) et pour lesquels il y a au moins un inscrit
+        (participants ou maybe).
+
+        La liste est triée du plus proche au plus lointain.
+        """
+        tz_paris = ZoneInfo("Europe/Paris")
+        now = now or datetime.now(tz=tz_paris)
+        horizon = now + timedelta(days=span_days)
+
+        cls._ensure_schema()
+
+        candidates: list[tuple[datetime, int]] = []
+
+        with cls._connection() as conn:
+            rows = conn.execute(
+                f"""
+                SELECT e.ctftime_id,
+                       e.start,
+                       (
+                         SELECT COUNT(*) FROM {cls._TABLE_PARTICIPANTS} p
+                         WHERE p.ctftime_id = e.ctftime_id
+                       ) +
+                       (
+                         SELECT COUNT(*) FROM {cls._TABLE_MAYBE} m
+                         WHERE m.ctftime_id = e.ctftime_id
+                       ) AS nb_any
+                FROM {cls._TABLE_EVENTS} e
+                """
+            )
+
+            for row in rows:
+                raw = row["start"] or ""
+                if not raw or "à venir" in raw.lower():
+                    continue
+                if row["nb_any"] == 0:
+                    continue  # pas d’inscrits
+
+                # Normalisation « AM/PM » éventuelle
+                clean = re.sub(
+                    r"\b([ap])\\.?m\\.?\\b",
+                    lambda m: {"a": "AM", "p": "PM"}[m.group(1).lower()],
+                    raw,
+                    flags=re.IGNORECASE,
+                )
+
+                try:
+                    dt = parser.parse(clean, dayfirst=True, fuzzy=True)
+                except (ValueError, OverflowError):
+                    print("⚠️  Parse KO :", raw)
+                    continue
+
+
+                dt = (
+                    dt.replace(tzinfo=tz_paris)
+                    if dt.tzinfo is None
+                    else dt.astimezone(tz_paris)
+                )
+
+                if not (now <= dt <= horizon):
+                    continue
+
+                candidates.append((dt, row["ctftime_id"]))
+
+        if not candidates:
+            raise LookupError(
+                f"Aucun évènement avec des inscrits trouvé dans les {span_days} prochains jours."
+            )
+
+        # Trie par date proche
+        candidates.sort(key=lambda t: t[0])
+
+        # Retourne la liste d’objets/dicts fournis par get_event_info
+        return [cls.get_event_info(eid) for _, eid in candidates]

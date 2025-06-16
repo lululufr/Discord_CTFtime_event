@@ -75,6 +75,8 @@ class Bot(commands.Bot):
 
                     embed.add_field(name="🏷️ Weight", value=event.weight, inline=False)
 
+                    embed.add_field(name="", value=f"[add calendar](https://ctftime.org/event/{event.ctftime_id}.ics)")
+
                     embed.add_field(name="", value=f"ID : {event.ctftime_id}")
 
                     msg = await channel.send(embed=embed)
