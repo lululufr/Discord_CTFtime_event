@@ -5,7 +5,7 @@ import feedparser
 from src.discord_ctftime.event import Engine
 from src.discord_ctftime.rss import Rss
 
-from command import setup_commands
+from src.discord_ctftime.bot.command import setup_commands
 
 import os
 from dotenv import load_dotenv
