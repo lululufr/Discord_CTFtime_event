@@ -67,7 +67,7 @@ class Bot(commands.Bot):
 
             if flux.entries:
                 # On parcourt les 5 premiers items, du plus ancien vers le plus récent
-                for item in reversed(flux.entries[:5]):
+                for item in reversed(flux.entries[:10]):
 
                     # Si on est déjà passé sur ce lien on peut arrêter la boucle ;
                     # tout ce qui suit est déjà connu.
@@ -145,7 +145,6 @@ class Bot(commands.Bot):
                 delete_after=30,
             )
 
-    # ───────────────────────── RAW REACTION REMOVE ─────────────────────────
     async def on_raw_reaction_remove(self, payload: discord.RawReactionActionEvent):
         if payload.guild_id != SERVER_ID:
             return
