@@ -64,70 +64,72 @@ class Bot(commands.Bot):
 
         while True:
             flux = feedparser.parse(RSS_URL)
+
             if flux.entries:
-                nouvel_article = flux.entries[0]
+                # On parcourt les 5 premiers items, du plus ancien vers le plus récent
+                for item in reversed(flux.entries[:5]):
 
-                if dernier_article != nouvel_article.link:
+                    # Si on est déjà passé sur ce lien on peut arrêter la boucle ;
+                    # tout ce qui suit est déjà connu.
+                    if dernier_article == item.link:
+                        break
 
-                    event = Rss(nouvel_article)
+                    event = Rss(item)
 
-                    # Vérifie si l'événement existe deja pour eviter doublons
-                    existe = self.engine.existe(event.ctftime_id)
-                    if not existe:
-                        print(f"Event {event.ctftime_id} not exists, creating.")
+                    # Vérifie si l'évènement existe déjà dans la BDD interne
+                    if self.engine.existe(event.ctftime_id):
+                        continue
 
+                    print(f"Event {event.ctftime_id} not exists, creating.")
 
-                        embed = discord.Embed(
-                            title=event.titre,
-                            url=event.lien,
-                            description="Inscris-toi avec ✅ si tu participes !\n ou avec ❓ si tu n'es pas sûr.",
-                            colour=discord.Colour.blue()
-                        )
-                        embed.add_field(name="📆 Début", value=event.date_debut, inline=True)
-                        embed.add_field(name="⏰ Fin", value=event.date_fin, inline=True)
+                    embed = discord.Embed(
+                        title=event.titre,
+                        url=event.lien,
+                        description=(
+                            "Inscris-toi avec ✅ si tu participes !\n"
+                            "…ou avec ❓ si tu n'es pas sûr."
+                        ),
+                        colour=discord.Colour.blue()
+                    )
+                    embed.add_field(name="📆 Début", value=event.date_debut, inline=True)
+                    embed.add_field(name="⏰ Fin",   value=event.date_fin,   inline=True)
+                    embed.add_field(name="🏷️ Weight", value=event.weight,   inline=False)
+                    embed.add_field(name="", value=f"[add calendar](https://ctftime.org/event/{event.ctftime_id}.ics)")
+                    embed.add_field(name="", value=f"ID : {event.ctftime_id}")
 
-                        embed.add_field(name="🏷️ Weight", value=event.weight, inline=False)
+                    msg = await channel.send(embed=embed)
 
-                        embed.add_field(name="", value=f"[add calendar](https://ctftime.org/event/{event.ctftime_id}.ics)")
+                    self.engine.new_event(
+                        ctftime_id=event.ctftime_id,
+                        msg_id=msg.id,
+                        title=event.titre,
+                        url=event.lien,
+                        start=event.date_debut,
+                        end=event.date_fin,
+                        description=item.description,
+                    )
 
-                        embed.add_field(name="", value=f"ID : {event.ctftime_id}")
-
-                        msg = await channel.send(embed=embed)
-
-
-                        event = self.engine.new_event(
-                            ctftime_id=event.ctftime_id,
-                            msg_id=msg.id,
-                            title=event.titre,
-                            url=event.lien,
-                            start=event.date_debut,
-                            end=event.date_fin,
-                            description=nouvel_article.description,
-                        )
-
-
-                        dernier_article = nouvel_article.link
+                # Met à jour la référence : le tout dernier article traité
+                dernier_article = flux.entries[0].link
 
             await asyncio.sleep(CHECK_INTERVAL)
 
+
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
-        # 1) filtrage de base
-        if payload.guild_id != SERVER_ID:                    # autre serveur
+        if payload.guild_id != SERVER_ID:
             return
-        if str(payload.emoji) not in ALLOWED_EMOJIS:        # emoji non géré
+        if str(payload.emoji) not in ALLOWED_EMOJIS:
             return
-        if payload.user_id == self.user.id:                 # réaction du bot
+        if payload.user_id == self.user.id:
             return
-        if not self.engine.existe(payload.message_id):      # pas un event CTF
+        if not self.engine.existe(payload.message_id):
             return
 
-        # 2) récupération des objets utiles
         guild   = self.get_guild(payload.guild_id)
         channel = self.get_channel(payload.channel_id)
         user    = guild.get_member(payload.user_id)
-        message = await channel.fetch_message(payload.message_id)  # facultatif
+        message = await channel.fetch_message(payload.message_id)
 
-        # 3) DB update + feedback
         if str(payload.emoji) == OK_EMOJI:
             self.engine.add_participant(payload.message_id, user.display_name)
             title = self.engine.get_event_info(payload.message_id)["title"]

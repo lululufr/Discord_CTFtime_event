@@ -240,13 +240,8 @@ class Engine:
 
     @classmethod
     def existe(cls, identifier: str | int) -> bool:
-        """Retourne ``True`` si un évènement correspondant à ``identifier`` existe.
 
-        L’``identifier`` peut être un *ctftime_id* **ou** un *msg_id*.
-        Contrairement à :py:meth:`_resolve_ctftime`, cette méthode ne lève pas
-        d’exception : elle renvoie simplement ``False`` si rien n’est trouvé.
-        """
-        #cls._ensure_schema()
+        cls._ensure_schema()
         with cls._connection() as conn:
             row = conn.execute(
                 f"SELECT 1 FROM {cls._TABLE_EVENTS} WHERE ctftime_id = ? OR msg_id = ? LIMIT 1",
