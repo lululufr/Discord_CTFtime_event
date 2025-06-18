@@ -238,6 +238,22 @@ class Engine:
     def remove_maybe_participant(cls, identifier: int | str, participant: str):
         cls._quick_part(cls._TABLE_MAYBE, str(identifier), participant, False)
 
+    @classmethod
+    def existe(cls, identifier: str | int) -> bool:
+        """Retourne ``True`` si un évènement correspondant à ``identifier`` existe.
+
+        L’``identifier`` peut être un *ctftime_id* **ou** un *msg_id*.
+        Contrairement à :py:meth:`_resolve_ctftime`, cette méthode ne lève pas
+        d’exception : elle renvoie simplement ``False`` si rien n’est trouvé.
+        """
+        #cls._ensure_schema()
+        with cls._connection() as conn:
+            row = conn.execute(
+                f"SELECT 1 FROM {cls._TABLE_EVENTS} WHERE ctftime_id = ? OR msg_id = ? LIMIT 1",
+                (str(identifier), str(identifier)),
+            ).fetchone()
+            return row is not None
+
 
     @classmethod
     def get_event_info(cls, identifier: int | str) -> Dict[str, Any]:

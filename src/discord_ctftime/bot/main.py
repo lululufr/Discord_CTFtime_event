@@ -24,6 +24,7 @@ SERVER_ID = int(os.getenv("SERVER_ID", None))  # ID du serveur Discord
 #DEFINE EMOJI REACTION
 OK_EMOJI = "✅"
 MAYBE_EMOJI = "❓"
+ALLOWED_EMOJIS = {OK_EMOJI, MAYBE_EMOJI}
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -65,92 +66,108 @@ class Bot(commands.Bot):
             flux = feedparser.parse(RSS_URL)
             if flux.entries:
                 nouvel_article = flux.entries[0]
+
                 if dernier_article != nouvel_article.link:
 
                     event = Rss(nouvel_article)
 
-                    embed = discord.Embed(
-                        title=event.titre,
-                        url=event.lien,
-                        description="Inscris-toi avec ✅ si tu participes !\n ou avec ❓ si tu n'es pas sûr.",
-                        colour=discord.Colour.blue()
-                    )
-                    embed.add_field(name="📆 Début", value=event.date_debut, inline=True)
-                    embed.add_field(name="⏰ Fin", value=event.date_fin, inline=True)
-
-                    embed.add_field(name="🏷️ Weight", value=event.weight, inline=False)
-
-                    embed.add_field(name="", value=f"[add calendar](https://ctftime.org/event/{event.ctftime_id}.ics)")
-
-                    embed.add_field(name="", value=f"ID : {event.ctftime_id}")
-
-                    msg = await channel.send(embed=embed)
+                    # Vérifie si l'événement existe deja pour eviter doublons
+                    existe = self.engine.existe(event.ctftime_id)
+                    if not existe:
+                        print(f"Event {event.ctftime_id} not exists, creating.")
 
 
-                    event = self.engine.new_event(
-                        ctftime_id=event.ctftime_id,
-                        msg_id=msg.id,
-                        title=event.titre,
-                        url=event.lien,
-                        start=event.date_debut,
-                        end=event.date_fin,
-                        description=nouvel_article.description,
-                    )
+                        embed = discord.Embed(
+                            title=event.titre,
+                            url=event.lien,
+                            description="Inscris-toi avec ✅ si tu participes !\n ou avec ❓ si tu n'es pas sûr.",
+                            colour=discord.Colour.blue()
+                        )
+                        embed.add_field(name="📆 Début", value=event.date_debut, inline=True)
+                        embed.add_field(name="⏰ Fin", value=event.date_fin, inline=True)
+
+                        embed.add_field(name="🏷️ Weight", value=event.weight, inline=False)
+
+                        embed.add_field(name="", value=f"[add calendar](https://ctftime.org/event/{event.ctftime_id}.ics)")
+
+                        embed.add_field(name="", value=f"ID : {event.ctftime_id}")
+
+                        msg = await channel.send(embed=embed)
 
 
-                    dernier_article = nouvel_article.link
+                        event = self.engine.new_event(
+                            ctftime_id=event.ctftime_id,
+                            msg_id=msg.id,
+                            title=event.titre,
+                            url=event.lien,
+                            start=event.date_debut,
+                            end=event.date_fin,
+                            description=nouvel_article.description,
+                        )
+
+
+                        dernier_article = nouvel_article.link
 
             await asyncio.sleep(CHECK_INTERVAL)
 
-    async def on_reaction_add(
-        self,
-        reaction: discord.Reaction,
-        user: discord.abc.User,
-    ):
-        if user == self.user:
+    async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
+        # 1) filtrage de base
+        if payload.guild_id != SERVER_ID:                    # autre serveur
+            return
+        if str(payload.emoji) not in ALLOWED_EMOJIS:        # emoji non géré
+            return
+        if payload.user_id == self.user.id:                 # réaction du bot
+            return
+        if not self.engine.existe(payload.message_id):      # pas un event CTF
             return
 
-        if str(reaction.emoji) == OK_EMOJI:
-            self.engine.add_participant(reaction.message.id, user.display_name)
-            await reaction.message.channel.send(
-                f"ℹ️ {user.display_name} Inscrit a : `{self.engine.get_event_info(reaction.message.id)['title']}` {reaction.emoji} ",
-                # f"`{reaction.message.id}`"
+        # 2) récupération des objets utiles
+        guild   = self.get_guild(payload.guild_id)
+        channel = self.get_channel(payload.channel_id)
+        user    = guild.get_member(payload.user_id)
+        message = await channel.fetch_message(payload.message_id)  # facultatif
+
+        # 3) DB update + feedback
+        if str(payload.emoji) == OK_EMOJI:
+            self.engine.add_participant(payload.message_id, user.display_name)
+            title = self.engine.get_event_info(payload.message_id)["title"]
+            await channel.send(
+                f"ℹ️ {user.display_name} inscrit à : `{title}` {OK_EMOJI}",
                 delete_after=30,
             )
-            return
-
-        if str(reaction.emoji) == MAYBE_EMOJI:
-            self.engine.add_maybe_participant(reaction.message.id, user.display_name)
-            await reaction.message.channel.send(
-                f"ℹ️ {user.display_name} Participera peut etre a : `{self.engine.get_event_info(reaction.message.id)['title']}` {reaction.emoji} ",
-                # f"`{reaction.message.id}`"
+        else:
+            self.engine.add_maybe_participant(payload.message_id, user.display_name)
+            title = self.engine.get_event_info(payload.message_id)["title"]
+            await channel.send(
+                f"ℹ️ {user.display_name} participera peut-être à : `{title}` {MAYBE_EMOJI}",
                 delete_after=30,
             )
+
+    # ───────────────────────── RAW REACTION REMOVE ─────────────────────────
+    async def on_raw_reaction_remove(self, payload: discord.RawReactionActionEvent):
+        if payload.guild_id != SERVER_ID:
+            return
+        if str(payload.emoji) not in ALLOWED_EMOJIS:
+            return
+        if not self.engine.existe(payload.message_id):
             return
 
+        guild   = self.get_guild(payload.guild_id)
+        channel = self.get_channel(payload.channel_id)
+        user    = guild.get_member(payload.user_id)
 
-
-    async def on_reaction_remove(self, reaction: discord.Reaction, user: discord.abc.User):
-        if user == self.user:
-            return
-
-        if str(reaction.emoji) == OK_EMOJI:
-            self.engine.remove_participant(reaction.message.id, user.display_name)
-            await reaction.message.channel.send(
-                f"➖ **{user.display_name}** Désinscrit !! {reaction.emoji} ",
-                #f"`{reaction.message.id}`"
+        if str(payload.emoji) == OK_EMOJI:
+            self.engine.remove_participant(payload.message_id, user.display_name)
+            await channel.send(
+                f"➖ **{user.display_name}** désinscrit {OK_EMOJI}",
                 delete_after=30,
             )
-            return
-
-        if str(reaction.emoji) == MAYBE_EMOJI:
-            self.engine.remove_maybe_participant(reaction.message.id, user.display_name)
-            await reaction.message.channel.send(
-                f"➖ **{user.display_name}** A retiré son \"peut etre\" {reaction.emoji} ",
-                #f"`{reaction.message.id}`"
+        else:
+            self.engine.remove_maybe_participant(payload.message_id, user.display_name)
+            await channel.send(
+                f"➖ **{user.display_name}** a retiré son « peut-être » {MAYBE_EMOJI}",
                 delete_after=30,
             )
-            return
 
 
 
