@@ -20,10 +20,12 @@ CHANNEL_ID     = int(os.getenv("CHANNEL_ID"))
 RSS_URL        = os.getenv("RSS_URL")
 CHECK_INTERVAL = int(os.getenv("CHECK_INTERVAL", 30))
 SERVER_ID = int(os.getenv("SERVER_ID", None))  # ID du serveur Discord
+DEEP_EVENT = int(os.getenv("DEEP_EVENT", 15)) 
 
 #DEFINE EMOJI REACTION
 OK_EMOJI = "✅"
 MAYBE_EMOJI = "❓"
+NOT_EMOJI = "👎"
 ALLOWED_EMOJIS = {OK_EMOJI, MAYBE_EMOJI}
 
 intents = discord.Intents.default()
@@ -57,6 +59,13 @@ class Bot(commands.Bot):
     async def on_ready(self):
         print(f"✅ Connecté en tant que {self.user}")
 
+    async def add_default_reactions(self, message: discord.Message) -> None:
+        for emoji in (OK_EMOJI, MAYBE_EMOJI,NOT_EMOJI):
+            try:
+                await message.add_reaction(emoji)
+            except discord.HTTPException:
+                pass
+
     async def check_rss(self):
         global dernier_article
         await self.wait_until_ready()
@@ -66,11 +75,10 @@ class Bot(commands.Bot):
             flux = feedparser.parse(RSS_URL)
 
             if flux.entries:
-                # On parcourt les 5 premiers items, du plus ancien vers le plus récent
-                for item in reversed(flux.entries[:10]):
+                # On parcourt les X event en fonction de la variable DEEP_event
+                for item in reversed(flux.entries[:DEEP_EVENT]):
 
-                    # Si on est déjà passé sur ce lien on peut arrêter la boucle ;
-                    # tout ce qui suit est déjà connu.
+
                     if dernier_article == item.link:
                         break
 
@@ -98,6 +106,7 @@ class Bot(commands.Bot):
                     embed.add_field(name="", value=f"ID : {event.ctftime_id}")
 
                     msg = await channel.send(embed=embed)
+                    await self.add_default_reactions(msg)
 
                     self.engine.new_event(
                         ctftime_id=event.ctftime_id,
