@@ -91,6 +91,7 @@ class Bot(commands.Bot):
                     print(f"Event {event.ctftime_id} not exists, creating.")
 
                     team_text = "🚶‍♂️ Individuel" if event.solo() else "👥 Équipe"
+                    online_text = "🛜 En ligne" if event.online() else "🏘️ Présentiel"
 
                     embed = discord.Embed(
                         title=f"🔒 {event.titre}",
@@ -110,7 +111,8 @@ class Bot(commands.Bot):
                     embed.add_field(name="\u200b",  value="\u200b",                  inline=True)
 
                     embed.add_field(name="🏅 Weight",   value=f"**{event.weight}** pts", inline=True)
-                    embed.add_field(name="🎽 Format",   value=team_text,                inline=True)
+                    embed.add_field(name="",   value=team_text,                inline=True)
+                    embed.add_field(name="",   value=online_text,                inline=True)
 
                     embed.add_field(
                         name="🗓️ Calendrier",

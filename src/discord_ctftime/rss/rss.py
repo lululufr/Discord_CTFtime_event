@@ -23,17 +23,33 @@ class Rss:
 
         self.ctftime_id = nouvel_article.id.split("/")[-1]  # ID CTFTIME à partir du lien
 
+        self.resp = requests.get(f"https://ctftime.org/event/{self.ctftime_id}", timeout=10)
+
     def solo(self):
-        url = f"https://ctftime.org/event/{self.ctftime_id}"
         TARGET_TEXT = "This event is limited to individual participation! No global rating points."
         try:
-            resp = requests.get(url, timeout=10)
-            resp.raise_for_status()          
+            self.resp.raise_for_status()          
         except requests.RequestException:
             #TODO a gerer
             return False
 
-        soup = BeautifulSoup(resp.text, "html.parser")
+        soup = BeautifulSoup(self.resp.text, "html.parser")
+
+        for p in soup.find_all("p"):
+            b = p.find("b")
+            if b and TARGET_TEXT in b.get_text(strip=True):
+                return True
+        return False
+
+    def online(self):
+        TARGET_TEXT = "On-line"
+        try:
+            self.resp.raise_for_status()          
+        except requests.RequestException:
+            #TODO a gerer
+            return False
+
+        soup = BeautifulSoup(self.resp.text, "html.parser")
 
         for p in soup.find_all("p"):
             b = p.find("b")
