@@ -1,4 +1,7 @@
 
+import requests
+from bs4 import BeautifulSoup
+
 class Rss:
     def __init__(self, nouvel_article):
         self.titre = nouvel_article.title
@@ -19,6 +22,24 @@ class Rss:
         self.debug = str(nouvel_article)
 
         self.ctftime_id = nouvel_article.id.split("/")[-1]  # ID CTFTIME à partir du lien
+
+    def solo(self):
+        url = f"https://ctftime.org/event/{self.ctftime_id}"
+        TARGET_TEXT = "This event is limited to individual participation! No global rating points."
+        try:
+            resp = requests.get(url, timeout=10)
+            resp.raise_for_status()          
+        except requests.RequestException:
+            #TODO a gerer
+            return False
+
+        soup = BeautifulSoup(resp.text, "html.parser")
+
+        for p in soup.find_all("p"):
+            b = p.find("b")
+            if b and TARGET_TEXT in b.get_text(strip=True):
+                return True
+        return False
 
     @property
     def get(self):

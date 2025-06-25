@@ -84,26 +84,41 @@ class Bot(commands.Bot):
 
                     event = Rss(item)
 
-                    # Vérifie si l'évènement existe déjà dans la BDD interne
+
                     if self.engine.existe(event.ctftime_id):
                         continue
 
                     print(f"Event {event.ctftime_id} not exists, creating.")
 
+                    team_text = "🚶‍♂️ Individuel" if event.solo() else "👥 Équipe"
+
                     embed = discord.Embed(
-                        title=event.titre,
+                        title=f"🔒 {event.titre}",
                         url=event.lien,
                         description=(
-                            "Inscris-toi avec ✅ si tu participes !\n"
-                            "…ou avec ❓ si tu n'es pas sûr."
+                            f"{OK_EMOJI} **Je participe**   •   {MAYBE_EMOJI} **Peut-être**\n"
+                            "—\n"
+                            "Clique sur une réaction pour t’inscrire !"
                         ),
-                        colour=discord.Colour.blue()
+                        colour=discord.Colour.blurple()   
                     )
-                    embed.add_field(name="📆 Début", value=event.date_debut, inline=True)
-                    embed.add_field(name="⏰ Fin",   value=event.date_fin,   inline=True)
-                    embed.add_field(name="🏷️ Weight", value=event.weight,   inline=False)
-                    embed.add_field(name="", value=f"[add calendar](https://ctftime.org/event/{event.ctftime_id}.ics)")
-                    embed.add_field(name="", value=f"ID : {event.ctftime_id}")
+
+                   
+                    embed.add_field(name="📆 Début",    value=f"**{event.date_debut}**", inline=True)
+                    embed.add_field(name="⏰ Fin",      value=f"**{event.date_fin}**",   inline=True)
+                    
+                    embed.add_field(name="\u200b",  value="\u200b",                  inline=True)
+
+                    embed.add_field(name="🏅 Weight",   value=f"**{event.weight}** pts", inline=True)
+                    embed.add_field(name="🎽 Format",   value=team_text,                inline=True)
+
+                    embed.add_field(
+                        name="🗓️ Calendrier",
+                        value=f"[Ajouter à mon agenda](https://ctftime.org/event/{event.ctftime_id}.ics)",
+                        inline=False,
+                    )
+
+                    embed.set_footer(text=f"ID de l’évènement : {event.ctftime_id}")
 
                     msg = await channel.send(embed=embed)
                     await self.add_default_reactions(msg)
