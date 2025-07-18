@@ -1,29 +1,28 @@
 
+from ctftime_api.client import CTFTimeClient
+
 import requests
+
 from bs4 import BeautifulSoup
 
-class Rss:
-    def __init__(self, nouvel_article):
-        self.titre = nouvel_article.title
-        self.lien = nouvel_article.link
-        self.summary = nouvel_article.summary
-
-
-        # Ca c'est  dégueulasse mais c'est le seul moyen de parser la date
-        # TODO a ameliorer
-        self.date_debut = nouvel_article.summary.split("\n")[1].split(";")[0].replace("Date:", "").replace("&mdash", "").strip()
-        self.date_fin = nouvel_article.summary.split("\n")[1].split(";")[1].replace("Date:", "").replace("&nbsp", "").strip()
-
-
-
-
-        self.weight = nouvel_article.summary.split("\n")[6].replace("<br />", "").split(":")[1].strip()
-
-        self.debug = str(nouvel_article)
-
-        self.ctftime_id = nouvel_article.id.split("/")[-1]  # ID CTFTIME à partir du lien
+class CTFtime:
+    def __init__(self, ctftime_id: int):
+        self.ctftime_id = int(ctftime_id)
 
         self.resp = requests.get(f"https://ctftime.org/event/{self.ctftime_id}", timeout=10)
+
+
+    async def fetch(self):
+        client = CTFTimeClient()
+        try:
+            event = await client.get_event_information(self.ctftime_id)
+            return event
+        finally:
+            if hasattr(client, "aclose"):
+                await client.aclose()
+            else:
+                await client.close()
+
 
     def solo(self):
         TARGET_TEXT = "This event is limited to individual participation! No global rating points."
@@ -57,8 +56,8 @@ class Rss:
                 return True
         return False
 
+
     @property
     def get(self):
         return self
-
 

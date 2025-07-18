@@ -254,47 +254,63 @@ class Engine:
     def get_event_info(cls, identifier: int | str) -> Dict[str, Any]:
         """Infos complètes via *ctftime_id* ou *msg_id*."""
         ctftime_id = cls._resolve_ctftime(str(identifier))
+
         with cls._connection() as conn:
             ev = conn.execute(
                 f"SELECT * FROM {cls._TABLE_EVENTS} WHERE ctftime_id = ?",
                 (ctftime_id,),
             ).fetchone()
-            info = dict(ev)
-            info["participants"] = cls._participants(cls._TABLE_PARTICIPANTS, ctftime_id)
+
+            if ev is None:                              # ← personne trouvé ?
+                raise KeyError(ctftime_id)
+
+            info = dict(ev)                             # sqlite3.Row → dict
+            info["participants"]       = cls._participants(cls._TABLE_PARTICIPANTS, ctftime_id)
             info["maybe_participants"] = cls._participants(cls._TABLE_MAYBE, ctftime_id)
             return info
 
     @classmethod
-    def next_event(cls, now: datetime | None = None) -> Dict[str, Any]:
+    def next_event(cls, now: Optional[datetime] = None) -> Dict[str, Any]:
+        """
+        Renvoie le prochain événement **ayant au moins un inscrit** et
+        dont la date de début est ≥ *now* (Europe/Paris).
+
+        Si rien n’est trouvé → LookupError.
+        """
         now = now or datetime.now(tz=ZoneInfo("Europe/Paris"))
         cls._ensure_schema()
 
-        best_id = best_dt = None
+        best_id: Optional[int] = None
+        best_dt: Optional[datetime] = None
+
+        SQL = f"""
+            SELECT
+                e.ctftime_id,
+                e.start,
+                COALESCE(
+                    (SELECT COUNT(*) FROM {cls._TABLE_PARTICIPANTS} p
+                    WHERE p.ctftime_id = e.ctftime_id), 0)
+                +
+                COALESCE(
+                    (SELECT COUNT(*) FROM {cls._TABLE_MAYBE} m
+                    WHERE m.ctftime_id = e.ctftime_id), 0)
+                AS nb_any
+            FROM {cls._TABLE_EVENTS} e
+        """
+
+        tz_paris = ZoneInfo("Europe/Paris")
 
         with cls._connection() as conn:
-            rows = conn.execute(
-                f"""
-                SELECT e.ctftime_id,
-                       e.start,
-                       (
-                         SELECT COUNT(*) FROM {cls._TABLE_PARTICIPANTS} p
-                         WHERE p.ctftime_id = e.ctftime_id
-                       ) +
-                       (
-                         SELECT COUNT(*) FROM {cls._TABLE_MAYBE} m
-                         WHERE m.ctftime_id = e.ctftime_id
-                       ) AS nb_any
-                FROM {cls._TABLE_EVENTS} e
-                """
-            )
-
-            for row in rows:
-                raw = row["start"] or ""
-                if not raw or "à venir" in raw.lower():
-                    continue
+            for row in conn.execute(SQL):
+                # 1) Assez de participants ?
                 if row["nb_any"] == 0:
                     continue
 
+                raw: str = row["start"] or ""
+                if not raw or "à venir" in raw.lower():
+                    continue
+
+                # 2) Normaliser les AM/PM français / anglais
                 clean = re.sub(
                     r"\b([ap])\.?m\.?",
                     lambda m: {"a": "AM", "p": "PM"}[m.group(1).lower()],
@@ -302,25 +318,26 @@ class Engine:
                     flags=re.IGNORECASE,
                 )
 
+                # 3) Parser la date
                 try:
                     dt = parser.parse(clean, dayfirst=True, fuzzy=True)
                 except (ValueError, OverflowError):
-                    print("⚠️  Parse KO :", raw)
+                    # log facultatif
+                    print(f"⚠️  Parse KO : {raw!r}")
                     continue
 
-                dt = (dt.replace(tzinfo=ZoneInfo("Europe/Paris"))
-                      if dt.tzinfo is None
-                      else dt.astimezone(ZoneInfo("Europe/Paris")))
+                # 4) Forcer le fuseau / convertir
+                dt = dt.replace(tzinfo=tz_paris) if dt.tzinfo is None else dt.astimezone(tz_paris)
 
+                # 5) Futur ?
                 if dt < now:
                     continue
 
-                print("✔️  Candidate :", row["ctftime_id"], dt)
-
+                # 6) Plus proche trouvé
                 if best_dt is None or dt < best_dt:
                     best_dt, best_id = dt, row["ctftime_id"]
 
-        if best_id is None:
+        if best_id is None:                       # ← aucun candidat
             raise LookupError("Aucun évènement futur avec des inscrits trouvé.")
 
         return cls.get_event_info(best_id)

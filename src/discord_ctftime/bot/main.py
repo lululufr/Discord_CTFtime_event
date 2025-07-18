@@ -3,7 +3,7 @@ from discord.ext import commands
 import asyncio
 import feedparser
 from src.discord_ctftime.event import Engine
-from src.discord_ctftime.rss import Rss
+#from src.discord_ctftime.ctftime import CTFtime
 
 from src.discord_ctftime.bot.command import setup_commands
 
@@ -19,13 +19,14 @@ DISCORD_TOKEN  = os.getenv("DISCORD_TOKEN")
 CHANNEL_ID     = int(os.getenv("CHANNEL_ID"))
 RSS_URL        = os.getenv("RSS_URL")
 CHECK_INTERVAL = int(os.getenv("CHECK_INTERVAL", 30))
-SERVER_ID = int(os.getenv("SERVER_ID", None))  # ID du serveur Discord
+SERVER_ID = int(os.getenv("SERVER_ID", None))  
 DEEP_EVENT = int(os.getenv("DEEP_EVENT", 15)) 
 
 #DEFINE EMOJI REACTION
-OK_EMOJI = "✅"
-MAYBE_EMOJI = "❓"
-NOT_EMOJI = "👎"
+OK_EMOJI = os.getenv("OK_EMOJI")
+MAYBE_EMOJI = os.getenv("MAYBE_EMOJI")
+NOT_EMOJI = os.getenv("NOT_EMOJI")
+
 ALLOWED_EMOJIS = {OK_EMOJI, MAYBE_EMOJI}
 
 intents = discord.Intents.default()
@@ -40,10 +41,17 @@ class Bot(commands.Bot):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.engine = Engine()
+        
+
 
     async def setup_hook(self):
-        # enregistre toutes les commandes texte
-        setup_commands(self, self.engine)
+
+        self.channel = self.get_channel(CHANNEL_ID)
+        if self.channel is None:                          
+            self.channel = await self.fetch_channel(CHANNEL_ID)
+
+        # enregistre toutes les commandes
+        setup_commands(self, self.engine, self.channel)
 
         #dashbaord
         await self.load_extension("src.discord_ctftime.bot.dashboard")
@@ -52,9 +60,6 @@ class Bot(commands.Bot):
         self.tree.copy_global_to(guild=guild)
         await self.tree.sync(guild=guild)
 
-
-        #lance le check RSS
-        self.bg_task = asyncio.create_task(self.check_rss())
 
     async def on_ready(self):
         print(f"✅ Connecté en tant que {self.user}")
@@ -65,81 +70,7 @@ class Bot(commands.Bot):
                 await message.add_reaction(emoji)
             except discord.HTTPException:
                 pass
-
-    async def check_rss(self):
-        global dernier_article
-        await self.wait_until_ready()
-        channel = self.get_channel(CHANNEL_ID)
-
-        while True:
-            flux = feedparser.parse(RSS_URL)
-
-            if flux.entries:
-                # On parcourt les X event en fonction de la variable DEEP_event
-                for item in reversed(flux.entries[:DEEP_EVENT]):
-
-
-                    if dernier_article == item.link:
-                        break
-
-                    event = Rss(item)
-
-
-                    if self.engine.existe(event.ctftime_id):
-                        continue
-
-                    print(f"Event {event.ctftime_id} not exists, creating.")
-
-                    team_text = "🚶‍♂️ Individuel" if event.solo() else "👥 Équipe"
-                    online_text = "🛜 En ligne" if event.online() else "🏘️ Présentiel"
-
-                    embed = discord.Embed(
-                        title=f"🔒 {event.titre}",
-                        url=event.lien,
-                        description=(
-                            f"{OK_EMOJI} **Je participe**   •   {MAYBE_EMOJI} **Peut-être**\n"
-                            "—\n"
-                            "Clique sur une réaction pour t’inscrire !"
-                        ),
-                        colour=discord.Colour.blurple()   
-                    )
-
-                   
-                    embed.add_field(name="📆 Début",    value=f"**{event.date_debut}**", inline=True)
-                    embed.add_field(name="⏰ Fin",      value=f"**{event.date_fin}**",   inline=True)
-                    
-                    embed.add_field(name="\u200b",  value="\u200b",                  inline=True)
-
-                    embed.add_field(name="🏅 Weight",   value=f"**{event.weight}** pts", inline=True)
-                    embed.add_field(name="",   value=team_text,                inline=True)
-                    embed.add_field(name="",   value=online_text,                inline=True)
-
-                    embed.add_field(
-                        name="🗓️ Calendrier",
-                        value=f"[Ajouter à mon agenda](https://ctftime.org/event/{event.ctftime_id}.ics)",
-                        inline=False,
-                    )
-
-                    embed.set_footer(text=f"ID de l’évènement : {event.ctftime_id}")
-
-                    msg = await channel.send(embed=embed)
-                    await self.add_default_reactions(msg)
-
-                    self.engine.new_event(
-                        ctftime_id=event.ctftime_id,
-                        msg_id=msg.id,
-                        title=event.titre,
-                        url=event.lien,
-                        start=event.date_debut,
-                        end=event.date_fin,
-                        description=item.description,
-                    )
-
-                # Met à jour la référence : le tout dernier article traité
-                dernier_article = flux.entries[0].link
-
-            await asyncio.sleep(CHECK_INTERVAL)
-
+            
 
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
         if payload.guild_id != SERVER_ID:

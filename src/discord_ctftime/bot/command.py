@@ -7,12 +7,35 @@ from typing import Any, Dict, List
 from functools import partial
 
 from src.discord_ctftime.event import Engine
+from src.discord_ctftime.ctftime import CTFtime
 from src.discord_ctftime.utils.utils import _to_datetime
 
 
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+
+DISCORD_TOKEN  = os.getenv("DISCORD_TOKEN")
+CHANNEL_ID     = int(os.getenv("CHANNEL_ID"))
+RSS_URL        = os.getenv("RSS_URL")
+CHECK_INTERVAL = int(os.getenv("CHECK_INTERVAL", 30))
+SERVER_ID = int(os.getenv("SERVER_ID", None))  
+DEEP_EVENT = int(os.getenv("DEEP_EVENT", 15)) 
+
+
+OK_EMOJI = os.getenv("OK_EMOJI")
+MAYBE_EMOJI = os.getenv("MAYBE_EMOJI")
+NOT_EMOJI = os.getenv("NOT_EMOJI")
+
+
+
+engine = Engine()
 
 
 async def _send( target: commands.Context | Interaction,content: str | None = None,**kwargs) -> None:
@@ -26,7 +49,61 @@ async def _send( target: commands.Context | Interaction,content: str | None = No
         await target.send(content, **kwargs)
 
 
-def setup_commands(bot: commands.Bot, engine: Engine) -> None:
+def setup_commands(bot: commands.Bot, engine: Engine, channel:TextChannel) -> None:
+
+
+    @bot.hybrid_command(
+    name="aide",
+    aliases=["a"],
+    description="Affiche l’aide du bot",
+    with_app_command=True,
+    )
+    async def help_cmd(ctx: commands.Context | Interaction) -> None:
+        """Commande /help – récapitulatif des commandes disponibles."""
+
+        if isinstance(ctx, Interaction) and not ctx.response.is_done():
+            await ctx.response.defer(ephemeral=True)
+        elif isinstance(ctx, commands.Context):
+            await ctx.defer(ephemeral=True)
+
+        embed = discord.Embed(
+            title="📖 Aide du bot",
+            description="Voici la liste des commandes disponibles :",
+            colour=discord.Colour.green(),
+        )
+
+        for cmd in bot.commands:
+            if cmd.hidden or not isinstance(cmd, commands.HybridCommand):
+                continue
+
+            slash = f"/{cmd.name}"
+            pref = f"`{ctx.prefix}{cmd.aliases[0]}`" if cmd.aliases else ""
+            liste_noms = " • ".join(filter(None, [slash, pref]))
+
+            desc = cmd.description or "Pas de description."
+
+            embed.add_field(name=liste_noms, value=desc, inline=False)
+
+        embed.set_footer(text="Paramètres facultatifs entre [crochets] • obligatoires entre <chevrons>")
+
+        await _send(ctx, embed=embed, ephemeral=True)
+
+
+
+##joke 
+
+    @bot.hybrid_command(
+        name="send_feet",
+        aliases=["sf"],
+        description="Envoi une photo de pied, a un membre aléatoire de l'équipe.",
+        with_app_command=True,
+    )
+    async def joke(ctx: commands.Context):
+        await _send(ctx, "Wesh ?? ça va fréro ? 🩴", ephemeral=True)
+
+## joke 
+
+
 
     @bot.hybrid_command(
         name="participants",
@@ -37,13 +114,16 @@ def setup_commands(bot: commands.Bot, engine: Engine) -> None:
     @app_commands.describe(
         ctftime_id="ID de l'évènement sur CTFtime"
     )
-    async def participants_cmd( ctx: commands.Context | Interaction,ctftime_id: str):
+    async def participants_cmd(ctx: commands.Context, ctftime_id: str):
 
-        try:
-            ev: Dict[str, Any] = engine.get_event_info(ctftime_id)
-        except KeyError:
-            await _send(ctx, f"❌ Aucun évènement avec l'ID `{ctftime_id}`.")
-            return
+        if ctx.interaction and not ctx.interaction.response.is_done():
+            await ctx.interaction.response.defer(ephemeral=True)
+
+        #try:
+        ev: Dict[str, Any] = engine.get_event_info(ctftime_id)
+        #except KeyError:
+        #    await _send(ctx, f"❌ Aucun évènement avec l'ID `{ctftime_id}`.", ephemeral=True)
+        #    return
 
         embed = Embed(
             title=f"Participants pour « {ev['title']} »",
@@ -109,6 +189,7 @@ def setup_commands(bot: commands.Bot, engine: Engine) -> None:
 
         await _send(ctx, embed=embed, ephemeral=True)
 
+    # fonction pour du jolie , du beau, du magnifique 
     def _chunks(seq: List[Any], n: int) -> List[List[Any]]:
         return [seq[i : i + n] for i in range(0, len(seq), n)]
 
@@ -169,3 +250,77 @@ def setup_commands(bot: commands.Bot, engine: Engine) -> None:
                 embed.add_field(name=f"**{ev['title']}**", value=value, inline=False)
 
             await send(embed=embed, ephemeral=True)
+
+
+
+    # Créer un nouvel événement en fonction d'un ID CTFtime
+    @bot.hybrid_command(
+        name="new_event",
+        aliases=["new"],
+        description="Créé un event CTF en se fiant a un ID CTFtime",
+        with_app_command=True,
+    )
+    @app_commands.describe(
+        ctftime_id="ID de l'évènement sur CTFtime"
+    )
+    async def add_event(ctx: commands.Context | Interaction, ctftime_id: str):
+
+        if isinstance(ctx, Interaction) and not ctx.response.is_done():
+            await ctx.response.defer(thinking=True, ephemeral=True)
+
+        ctf = CTFtime(ctftime_id)
+        try:
+            event = await ctf.fetch()
+        except Exception:
+            await _send(ctx, "❌ L'évènement n'existe pas avec cet ID.", ephemeral=True)
+            return
+
+        if engine.existe(event.id):
+            await _send(ctx, "ℹ️ L'évènement est déjà enregistré.", ephemeral=True)
+            return
+
+        team_text   = "🚶‍♂️ Individuel" if ctf.solo() else "👥 Équipe"
+        online_text = "🛜 En ligne"     if ctf.online() else "🏘️ Présentiel"
+
+        embed = discord.Embed(
+            title=f"🔒 {event.title}",
+            url=event.url,
+            description=(
+                f"{OK_EMOJI} **Je participe**   •   {MAYBE_EMOJI} **Peut-être**\n"
+                "—\n"
+                "Clique sur une réaction pour t’inscrire !"
+            ),
+            colour=discord.Colour.blurple(),
+        )
+
+        embed.add_field(name="📆 Début",  value=f"**{event.start}**", inline=True)
+        embed.add_field(name="⏰ Fin",    value=f"**{event.finish}**", inline=True)
+        embed.add_field(name="\u200b",   value="\u200b",              inline=True)
+        embed.add_field(name="🏅 Weight", value=f"**{event.weight}** pts", inline=True)
+        embed.add_field(name="",         value=team_text,             inline=True)
+        embed.add_field(name="",         value=online_text,           inline=True)
+        embed.add_field(
+            name="🗓️ Calendrier",
+            value=f"[Ajouter à mon agenda](https://ctftime.org/event/{event.id}.ics)",
+            inline=False,
+        )
+        embed.set_footer(text=f"ID de l’évènement : {event.id}")
+
+        msg = await channel.send(embed=embed)
+        await bot.add_default_reactions(msg)
+
+        engine.new_event(
+            ctftime_id=event.id,
+            msg_id=msg.id,
+            title=event.title,
+            url=str(event.ctftime_url),
+            start=event.start,
+            end=event.finish,
+            description=event.description,
+        )
+
+        await _send(
+            ctx,
+            f"✅ Évènement **{event.title}** créé et publié dans {channel.mention} !",
+            ephemeral=True,
+        )
