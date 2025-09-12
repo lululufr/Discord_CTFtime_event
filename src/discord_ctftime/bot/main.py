@@ -1,5 +1,8 @@
+from os import eventfd_read
+
 import discord
 from discord.ext import commands
+from discord.utils import get
 import asyncio
 import feedparser
 from src.discord_ctftime.event import Engine
@@ -86,21 +89,34 @@ class Bot(commands.Bot):
         channel = self.get_channel(payload.channel_id)
         user    = guild.get_member(payload.user_id)
         message = await channel.fetch_message(payload.message_id)
+        roles = guild.roles
 
         if str(payload.emoji) == OK_EMOJI:
             self.engine.add_participant(payload.message_id, user.display_name)
             title = self.engine.get_event_info(payload.message_id)["title"]
+
+            # add role
+            role = get(roles, name=title)
+            if role is None:
+                role = await guild.create_role(name=title, reason="Nouveau CTF")
+                #create channel with role permissions on channel
+                channel = await guild.create_text_channel(title)
+                await channel.set_permissions(role, read_messages=True, send_messages=True)
+                await channel.set_permissions(guild.default_role, read_messages=False)
+
+            await user.add_roles(role)
+
             await channel.send(
                 f"ℹ️ {user.display_name} inscrit à : `{title}` {OK_EMOJI}",
                 delete_after=30,
             )
         else:
             self.engine.add_maybe_participant(payload.message_id, user.display_name)
-            title = self.engine.get_event_info(payload.message_id)["title"]
-            await channel.send(
-                f"ℹ️ {user.display_name} participera peut-être à : `{title}` {MAYBE_EMOJI}",
-                delete_after=30,
-            )
+            #title = self.engine.get_event_info(payload.message_id)["title"]
+            #await channel.send(
+            #    f"ℹ️ {user.display_name} participera peut-être à : `{title}` {MAYBE_EMOJI}",
+            #    delete_after=30,
+            #)
 
     async def on_raw_reaction_remove(self, payload: discord.RawReactionActionEvent):
         if payload.guild_id != SERVER_ID:
@@ -113,19 +129,31 @@ class Bot(commands.Bot):
         guild   = self.get_guild(payload.guild_id)
         channel = self.get_channel(payload.channel_id)
         user    = guild.get_member(payload.user_id)
+        roles = guild.roles
+
 
         if str(payload.emoji) == OK_EMOJI:
             self.engine.remove_participant(payload.message_id, user.display_name)
-            await channel.send(
-                f"➖ **{user.display_name}** désinscrit {OK_EMOJI}",
-                delete_after=30,
-            )
+
+            title = self.engine.get_event_info(payload.message_id)["title"]
+
+            # role retiré
+            role = get(roles, name=title)
+            await user.remove_roles(role)
+
+            # n'affiche le message que pour l'utilisateur
+
+            #await channel.send(
+            #    f"➖ **{user.display_name}** désinscrit {OK_EMOJI}",
+            #    delete_after=30,
+            #)
+
         else:
             self.engine.remove_maybe_participant(payload.message_id, user.display_name)
-            await channel.send(
-                f"➖ **{user.display_name}** a retiré son « peut-être » {MAYBE_EMOJI}",
-                delete_after=30,
-            )
+            #await channel.send(
+            #    f"➖ **{user.display_name}** a retiré son « peut-être » {MAYBE_EMOJI}",
+            #    delete_after=30,
+            #)
 
 
 
