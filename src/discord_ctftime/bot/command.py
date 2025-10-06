@@ -9,6 +9,7 @@ from functools import partial
 from src.discord_ctftime.event import Engine
 from src.discord_ctftime.ctftime import CTFtime
 from src.discord_ctftime.utils.utils import _to_datetime
+from src.discord_ctftime.bot.group import Group
 
 
 from datetime import datetime
@@ -26,8 +27,8 @@ CHANNEL_ID     = int(os.getenv("CHANNEL_ID"))
 RSS_URL        = os.getenv("RSS_URL")
 CHECK_INTERVAL = int(os.getenv("CHECK_INTERVAL", 30))
 SERVER_ID = int(os.getenv("SERVER_ID", None))  
-DEEP_EVENT = int(os.getenv("DEEP_EVENT", 15)) 
-
+DEEP_EVENT = int(os.getenv("DEEP_EVENT", 15))
+CATE_ID = int(os.getenv("CATEGORY_ID_FOR_CTFCHANNEL", None)) 
 
 OK_EMOJI = os.getenv("OK_EMOJI")
 MAYBE_EMOJI = os.getenv("MAYBE_EMOJI")
@@ -39,7 +40,6 @@ engine = Engine()
 
 
 async def _send( target: commands.Context | Interaction,content: str | None = None,**kwargs) -> None:
-
     if isinstance(target, Interaction):
         if target.response.is_done():
             await target.followup.send(content, **kwargs)
@@ -269,11 +269,15 @@ def setup_commands(bot: commands.Bot, engine: Engine, channel:TextChannel) -> No
             await ctx.response.defer(thinking=True, ephemeral=True)
 
         ctf = CTFtime(ctftime_id)
+
+
         try:
             event = await ctf.fetch()
         except Exception:
             await _send(ctx, "❌ L'évènement n'existe pas avec cet ID.", ephemeral=True)
             return
+
+ 
 
         if engine.existe(event.id):
             await _send(ctx, "ℹ️ L'évènement est déjà enregistré.", ephemeral=True)
@@ -281,6 +285,8 @@ def setup_commands(bot: commands.Bot, engine: Engine, channel:TextChannel) -> No
 
         team_text   = "🚶‍♂️ Individuel" if ctf.solo() else "👥 Équipe"
         online_text = "🛜 En ligne"     if ctf.online() else "🏘️ Présentiel"
+
+
 
         embed = discord.Embed(
             title=f"🔒 {event.title}",
@@ -318,6 +324,15 @@ def setup_commands(bot: commands.Bot, engine: Engine, channel:TextChannel) -> No
             end=event.finish,
             description=event.description,
         )
+
+        grp = Group(ctx.interaction, CATE_ID)
+        # création du groupe discord 
+        #try :
+        await grp.new_group(event.title)
+
+        #except:
+        #    print("error creation role")
+
 
         await _send(
             ctx,

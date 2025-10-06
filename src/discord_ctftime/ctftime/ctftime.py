@@ -9,6 +9,7 @@ class CTFtime:
     def __init__(self, ctftime_id: int):
         self.ctftime_id = int(ctftime_id)
 
+        # pour les infos solo et online  ( non présent dansz l'api)
         self.resp = requests.get(f"https://ctftime.org/event/{self.ctftime_id}", timeout=10)
 
 
@@ -24,6 +25,8 @@ class CTFtime:
                 await client.close()
 
 
+
+    # verifier si ces infos sont présente dans les infos de la lib
     def solo(self):
         TARGET_TEXT = "This event is limited to individual participation! No global rating points."
         try:

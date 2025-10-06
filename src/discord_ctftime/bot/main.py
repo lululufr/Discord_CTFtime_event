@@ -6,6 +6,7 @@ from src.discord_ctftime.event import Engine
 #from src.discord_ctftime.ctftime import CTFtime
 
 from src.discord_ctftime.bot.command import setup_commands
+import src.discord_ctftime.bot.group
 
 
 import src.discord_ctftime.bot.dashboard
@@ -65,13 +66,14 @@ class Bot(commands.Bot):
         print(f"✅ Connecté en tant que {self.user}")
 
     async def add_default_reactions(self, message: discord.Message) -> None:
-        for emoji in (OK_EMOJI, MAYBE_EMOJI,NOT_EMOJI):
+        for emoji in (OK_EMOJI, MAYBE_EMOJI, NOT_EMOJI):
             try:
                 await message.add_reaction(emoji)
             except discord.HTTPException:
                 pass
             
 
+    #  ajout d'une réaction
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
         if payload.guild_id != SERVER_ID:
             return
@@ -87,8 +89,14 @@ class Bot(commands.Bot):
         user    = guild.get_member(payload.user_id)
         message = await channel.fetch_message(payload.message_id)
 
+        # Participe a un event
         if str(payload.emoji) == OK_EMOJI:
+            # ajoute le participant  la bdd
             self.engine.add_participant(payload.message_id, user.display_name)
+
+            # ajoute au  groupe discord 
+
+            # Message notifié ajout
             title = self.engine.get_event_info(payload.message_id)["title"]
             await channel.send(
                 f"ℹ️ {user.display_name} inscrit à : `{title}` {OK_EMOJI}",
@@ -102,6 +110,7 @@ class Bot(commands.Bot):
                 delete_after=30,
             )
 
+    # retire sa réaction
     async def on_raw_reaction_remove(self, payload: discord.RawReactionActionEvent):
         if payload.guild_id != SERVER_ID:
             return
@@ -115,7 +124,13 @@ class Bot(commands.Bot):
         user    = guild.get_member(payload.user_id)
 
         if str(payload.emoji) == OK_EMOJI:
+            # retire l'utilisateur e la bdd
             self.engine.remove_participant(payload.message_id, user.display_name)
+
+            # retire du groupe discord 
+
+
+            # Message notifié 
             await channel.send(
                 f"➖ **{user.display_name}** désinscrit {OK_EMOJI}",
                 delete_after=30,
