@@ -146,10 +146,10 @@ class Bot(commands.Bot):
             #)
         else:
             self.engine.remove_maybe_participant(payload.message_id, user.display_name)
-            await channel.send(
-                f"➖ **{user.display_name}** a retiré son « peut-être » {MAYBE_EMOJI}",
-                delete_after=30,
-            )
+            #await channel.send(
+            #    f"➖ **{user.display_name}** a retiré son « peut-être » {MAYBE_EMOJI}",
+            #    delete_after=30,
+            #)
 
 
 
