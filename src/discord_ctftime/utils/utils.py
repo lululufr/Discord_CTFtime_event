@@ -21,4 +21,4 @@ def _to_datetime(obj: Any, tz: ZoneInfo) -> datetime | None:
     return None
 
 def normalize_channel_name(name: str) -> str:
-    return name.lower().replace(" ", "-").replace(".", "")
+    return name.lower().replace(" ", "-").replace(".", "").replace("(","").replace(")","")

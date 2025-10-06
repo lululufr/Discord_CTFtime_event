@@ -39,14 +39,19 @@ NOT_EMOJI = os.getenv("NOT_EMOJI")
 engine = Engine()
 
 
-async def _send( target: commands.Context | Interaction,content: str | None = None,**kwargs) -> None:
-    if isinstance(target, Interaction):
-        if target.response.is_done():
-            await target.followup.send(content, **kwargs)
+async def _send(target: commands.Context | Interaction, content: str | None = None, **kwargs):
+    try:
+        if isinstance(target, Interaction):
+            if not target.response.is_done():
+                await target.response.send_message(content, **kwargs)
+            else:
+                await target.followup.send(content, **kwargs)
         else:
-            await target.response.send_message(content, **kwargs)
-    else:
-        await target.send(content, **kwargs)
+            await target.send(content, **kwargs)
+    except discord.errors.NotFound:
+        print("⚠️ Interaction expirée, impossible d'envoyer le message")
+    except discord.errors.HTTPException as e:
+        print(f"⚠️ Erreur HTTP lors de l'envoi du message : {e}")
 
 
 def setup_commands(bot: commands.Bot, engine: Engine, channel:TextChannel) -> None:
