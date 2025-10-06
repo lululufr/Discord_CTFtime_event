@@ -1,4 +1,5 @@
 import discord
+from src.discord_ctftime.utils.utils import normalize_channel_name
 
 
 class Group():
@@ -28,12 +29,12 @@ class Group():
         }
 
         # verifie si le saloon existe : 
-        existing_channel = discord.utils.get(self.guild.text_channels, name=nom)
+        existing_channel = discord.utils.get(self.guild.text_channels, name=normalize_channel_name(nom))
 
         if existing_channel is None:
             # Crée le salon texte privé
             channel = await self.guild.create_text_channel(
-                name=nom,
+                name=normalize_channel_name(nom),
                 overwrites=overwrites,
                 category=self.category,
                 reason=f"Salon privé pour le groupe {nom}"
@@ -51,17 +52,35 @@ class Group():
             )
 
 
-    async def add_member(self, membre: discord.Member, group_name: str):
-        role = discord.utils.get(self.guild.roles, name=group_name)
-
-        if role is None:
-            await self.interaction.response.send_message(f"❌ Le rôle **{group_name}** n’existe pas.")
-            return
-
-        await Group.add_member_group(self.interaction, membre, role)
-
-    
-
     #TODO: faire un garbage collector des vieux groupes
     async def clean_group(self):
         return
+
+
+async def add_member(guild: discord.Guild, member: discord.Member, role_name: str, channel: discord.TextChannel):
+    role = discord.utils.get(guild.roles, name=role_name)
+
+    if role is None:
+        await channel.send(f"❌ Le rôle **{role_name}** n’existe pas.", delete_after=30)
+        return
+
+    try:
+        await member.add_roles(role)
+        #await channel.send(f"✅ {member.display_name} a été ajouté au rôle **{role_name}** !", delete_after=30)
+    except discord.Forbidden:
+        await channel.send("❌ Erreur perms BOT. Veuillez Contacter @lululufr", delete_after=30)
+
+
+async def remove_member(guild: discord.Guild, member: discord.Member, role_name: str, channel: discord.TextChannel):
+    role = discord.utils.get(guild.roles, name=role_name)
+
+    if role is None:
+        await channel.send(f"❌ Le rôle **{role_name}** n’existe pas.", delete_after=30)
+        return
+
+    try:
+        await member.remove_roles(role)
+        #await channel.send(f"➖ {member.display_name} a été retiré du rôle **{role_name}**.", delete_after=30)
+    except discord.Forbidden:
+        await channel.send("❌ Erreur perms BOT. Veuillez Contacter @lululufr", delete_after=30)
+

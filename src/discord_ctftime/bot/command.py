@@ -327,11 +327,10 @@ def setup_commands(bot: commands.Bot, engine: Engine, channel:TextChannel) -> No
 
         grp = Group(ctx.interaction, CATE_ID)
         # création du groupe discord 
-        #try :
-        await grp.new_group(event.title)
-
-        #except:
-        #    print("error creation role")
+        try :
+            await grp.new_group(event.title)
+        except:
+            print("error creation role")
 
 
         await _send(

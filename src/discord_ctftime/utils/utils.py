@@ -19,3 +19,6 @@ def _to_datetime(obj: Any, tz: ZoneInfo) -> datetime | None:
         except (ValueError, OverflowError):
             return None
     return None
+
+def normalize_channel_name(name: str) -> str:
+    return name.lower().replace(" ", "-").replace(".", "")

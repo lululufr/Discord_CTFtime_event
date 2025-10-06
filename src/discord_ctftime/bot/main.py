@@ -4,6 +4,8 @@ import asyncio
 import feedparser
 from src.discord_ctftime.event import Engine
 #from src.discord_ctftime.ctftime import CTFtime
+from src.discord_ctftime.bot.group import add_member, remove_member
+
 
 from src.discord_ctftime.bot.command import setup_commands
 import src.discord_ctftime.bot.group
@@ -41,8 +43,7 @@ dernier_article = None
 class Bot(commands.Bot):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.engine = Engine()
-        
+        self.engine = Engine()        
 
 
     async def setup_hook(self):
@@ -91,24 +92,28 @@ class Bot(commands.Bot):
 
         # Participe a un event
         if str(payload.emoji) == OK_EMOJI:
+
             # ajoute le participant  la bdd
             self.engine.add_participant(payload.message_id, user.display_name)
 
+
+            title = self.engine.get_event_info(payload.message_id)["title"]
+
             # ajoute au  groupe discord 
+            await add_member(guild, user, title, channel)
 
             # Message notifié ajout
-            title = self.engine.get_event_info(payload.message_id)["title"]
-            await channel.send(
-                f"ℹ️ {user.display_name} inscrit à : `{title}` {OK_EMOJI}",
-                delete_after=30,
-            )
+            #await channel.send(
+            #    f"ℹ️ {user.display_name} inscrit à : `{title}` {OK_EMOJI}",
+            #    delete_after=30,
+            #)
         else:
             self.engine.add_maybe_participant(payload.message_id, user.display_name)
             title = self.engine.get_event_info(payload.message_id)["title"]
-            await channel.send(
-                f"ℹ️ {user.display_name} participera peut-être à : `{title}` {MAYBE_EMOJI}",
-                delete_after=30,
-            )
+            #await channel.send(
+            #    f"ℹ️ {user.display_name} participera peut-être à : `{title}` {MAYBE_EMOJI}",
+            #    delete_after=30,
+            #)
 
     # retire sa réaction
     async def on_raw_reaction_remove(self, payload: discord.RawReactionActionEvent):
@@ -129,12 +134,16 @@ class Bot(commands.Bot):
 
             # retire du groupe discord 
 
+            title = self.engine.get_event_info(payload.message_id)["title"]
+
+            # ajoute au  groupe discord 
+            await remove_member(guild, user, title, channel)
 
             # Message notifié 
-            await channel.send(
-                f"➖ **{user.display_name}** désinscrit {OK_EMOJI}",
-                delete_after=30,
-            )
+            #await channel.send(
+            #    f"➖ **{user.display_name}** désinscrit {OK_EMOJI}",
+            #    delete_after=30,
+            #)
         else:
             self.engine.remove_maybe_participant(payload.message_id, user.display_name)
             await channel.send(
